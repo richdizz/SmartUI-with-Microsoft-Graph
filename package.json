@@ -1,0 +1,13 @@
+{
+  "name": "smartuiweb",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "@microsoft/microsoft-graph-client": "^1.0.0",
+    "angular": "^1.6.10",
+    "ng-office-ui-fabric": "^0.16.0"
+  },
+  "author": "richdizz",
+  "license": "MIT"
+}

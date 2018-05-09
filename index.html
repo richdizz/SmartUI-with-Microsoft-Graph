@@ -1,0 +1,159 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title>Smart UI with Microsoft Graph</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        
+        <link rel="stylesheet" href="/node_modules/office-ui-fabric/dist/css/fabric.css">
+        <link rel="stylesheet" href="/node_modules/office-ui-fabric/dist/css/fabric.components.css">
+        <script type="text/javascript" src="https://js.live.net/v7.2/OneDrive.js"></script>
+        <script type="text/javascript" src="node_modules/angular/angular.min.js"></script>
+        <script type="text/javascript" src="/node_modules/@microsoft/microsoft-graph-client/lib/graph-js-sdk-web.js"></script>
+        <style>
+        .ms-Grid-row {
+            margin-top: 10px;
+        }
+        </style>
+    </head>
+    <body ng-app="smartUI">
+        <div class="ms-Grid" ng-controller="mainCtrl">
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-row">
+                    <div class="ms-Grid-col ms-sm12">
+                        <span class="ms-font-su">Smart UI with Microsoft Graph</span>
+                    </div>
+                </div>
+            </div>
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-row">
+                    <div class="ms-Grid-col ms-sm12">
+                        <span class="ms-font-xl">Step 1 - Select workbook</span>
+                    </div>
+                </div>
+            </div>
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12">
+                    <uif-button uif-type="primary" ng-click="pickFile()">Select Workbook</uif-button>
+                    <uif-label>{{selectedWorkbook}}</uif-label>
+                </div>
+            </div>
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-row">
+                    <div class="ms-Grid-col ms-sm12">
+                        <span class="ms-font-xl">Step 2 - Select user</span>
+                    </div>
+                </div>
+            </div>
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12" style="width: 300px;">
+                    <uif-people-picker uif-people="getPeopleAsync" ng-model="selectedAsyncPeople" uif-type="compact" uif-search-delay="300" placeholder="Search for people" ng-disabled="!graphClient">
+                        <uif-people-search-more>
+                            <uif-primary-text uif-search-for-text="You are searching for: ">Search organization people</uif-primary-text>
+                        </uif-people-search-more>
+                    </uif-people-picker>
+                </div>
+            </div>
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-row">
+                    <div class="ms-Grid-col ms-sm12">
+                        <span class="ms-font-xl">Step 3 - Send email</span>
+                    </div>
+                </div>
+            </div>
+            {{foo}}
+            <div class="ms-Grid-row">
+                <div class="ms-Grid-col ms-sm12">
+                    <uif-button uif-type="primary" ng-click="sendMail()" ng-disabled="!selectedAsyncPeople">Send Email</uif-button>
+                </div>
+            </div>
+        </div>
+
+        <script src="/node_modules/angular/angular.js"></script> 
+        <script src="/node_modules/ng-office-ui-fabric/ngOfficeUiFabric.js"></script> 
+        <script type="text/javascript"> 
+            angular.module("smartUI", ["officeuifabric.core", "officeuifabric.components"])
+                .controller("mainCtrl", ["$scope", function($scope) {
+                    $scope.graphClient = null;
+                    $scope.pickFile = function() {
+                        // initialize options with additional scopes so we can use it's token
+                        var odOptions = {
+                            clientId: "dbe72e5d-0d0c-4d9b-bc83-9cc027e0c30f",
+                            action: "query",
+                            multiSelect: false,
+                            advanced: {
+                                scopes: "People.Read Mail.Send",
+                                filter: ".xlsx"
+                            },
+                            success: function(result) { 
+                                // initialize the graph client
+                                console.log(JSON.stringify(result));
+                                $scope.graphClient = MicrosoftGraph.Client.init({
+                                    authProvider: (done) => {
+                                        done(null, result.accessToken); //first parameter takes an error if you can't get an access token
+                                    }
+                                });
+                                $scope.graphClient.api("/me/drive/items/" + result.value[0].id)
+                                    .get(function (err, res) {
+                                        $scope.selectedWorkbook = res.name
+                                        $scope.$apply();
+                                    });
+                            },
+                            cancel: function() { 
+                                console.log("OneDrive picker cancel");
+                            },
+                            error: function(e) { 
+                                console.log("Error: " + e); 
+                            }
+                        };
+                        OneDrive.open(odOptions);
+                    };
+
+                    $scope.getPhoto = function(uitem, gitem) {
+                        return new Promise(function(resolve, reject) {
+                            $scope.graphClient.api("/users/" + gitem.id + "/photo/$value")
+                                .responseType('blob')
+                                .get((err, res, rawResponse) => {
+                                    if (!err) {
+                                        const url = window.URL;
+				                        const blobUrl = url.createObjectURL(rawResponse.xhr.response);
+                                        uitem.icon = blobUrl;
+                                        resolve();
+                                    }
+                                });
+                        });
+                    };
+
+                    $scope.getPeopleAsync = function(text) {
+                        return new Promise(function(resolve, reject) {
+                            if (text && text.length > 0) {
+                                $scope.graphClient.api("/me/people?$search=" + text)
+                                    .get(function (err, res) {
+                                        var data = [];
+                                        angular.forEach(res.value, function(v,i) {
+                                            var result = {
+                                                icon: "nopic.png",
+                                                primaryText: v.displayName,
+                                                secondaryText: v.jobTitle,
+                                                presence: "available",
+                                                color: "magenta"
+                                            };
+                                            $scope.getPhoto(result, v).then(function() { $scope.$apply(); });
+                                            data.push(result);
+                                        });
+                                        resolve(data);
+                                    });
+                            }
+                            else
+                                resolve([]);
+                        });
+                    };
+
+                    $scope.sendMail = function() {
+                        alert("TODO - send email");
+                    };
+                }]);
+ 
+        </script>
+    </body>
+</html>
